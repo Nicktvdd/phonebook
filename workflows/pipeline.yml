@@ -1,0 +1,58 @@
+name: Deployment pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+   branches: [main]
+   types: [opened, synchronize]
+
+jobs:
+  simple_deployment_pipeline:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies 
+        run: npm install
+         
+      - name: Check style
+        run: npm install eslint --save-dev
+         npx eslint --init
+         npm run eslint
+
+        if: ${{ github.event_name == 'push' }}
+      - name: Trigger deployment
+        run: curl https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }}?key=${{ secrets.RENDER_API_KEY }}
+
+  tag_release:
+   needs: [simple_deployment_pipeline]
+   runs-on: ubuntu-20.04
+   steps:
+    - uses: actions/checkout@v4
+    - if: ${{ github.event_name == 'push' && !contains(github.event.commits[0].message, '#skip')}}
+      name: Bump version and push tag
+      uses: anothrNick/github-tag-action@1.67.0
+      env: 
+        DEFAULT_BUMP: patch
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - if: ${{ success() }}
+      name: Build succeeded
+      uses: rjstone/discord-webhook-notify@v1.0.4
+      with:
+       severity: info
+       details: Build succeeded
+       webhookUrl: ${{ secrets.DISCORD_WEBHOOK_URL }}
+       username: "Nicktvdd"
+    - if: ${{ failure() }}
+      name: Build failed
+      uses: rjstone/discord-webhook-notify@v1.0.4
+      with:
+       severity: error
+       details: Build failed
+       webhookUrl: ${{ secrets.DISCORD_WEBHOOK_URL }}
+       username: "Nicktvdd"
+    
